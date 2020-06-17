@@ -18,12 +18,6 @@ type exp struct {
 	dbBLK *leveldb.DB
 	// KV {BLOCK INDEX -> DISTRIBUTED GAS PER NEO}
 	dbGAS *leveldb.DB
-	// L1 cache of dbGAS
-	l1GAS *leveldb.DB
-	// L2 cache of dbGAS
-	l2GAS *leveldb.DB
-	// L3 cache of dbGAS
-	l3GAS *leveldb.DB
 	// current block index
 	block uint64
 	// total vote count
@@ -42,9 +36,6 @@ func (me *exp) init(block uint64) {
 	me.dbNEO = db("data/neo")
 	me.dbBLK = db("data/blk")
 	me.dbGAS = db("data/gas")
-	me.l1GAS = db("data/l1")
-	me.l2GAS = db("data/l2")
-	me.l3GAS = db("data/l3")
 
 	me.block = block
 
@@ -87,11 +78,21 @@ func (me *exp) gen(size int) {
 
 // next block
 func (me *exp) next(inflation uint64) {
+	me.block++
 	// nGAS: calculate distributed GAS per NEO in current block
 	nGAS := inflation / me.count
 	nBLK := me.block
 	bGAS := make([]byte, 8)
 	bBLK := make([]byte, 8)
+
+	nCUR := me.block - 1
+	bCUR := make([]byte, 8)
+	binary.BigEndian.PutUint64(bCUR, nCUR)
+
+	if bTMP, err := me.dbGAS.Get(bCUR, nil); err == nil {
+		nGAS += binary.BigEndian.Uint64(bTMP)
+	}
+
 	binary.BigEndian.PutUint64(bGAS, nGAS)
 	binary.BigEndian.PutUint64(bBLK, nBLK)
 
@@ -99,74 +100,6 @@ func (me *exp) next(inflation uint64) {
 	if err := me.dbGAS.Put(bBLK, bGAS, nil); err != nil {
 		log.Fatalln(err)
 	}
-
-	// update L1 cache
-	if nBLK&0xff == 0xff {
-		bTMP := bytes.Repeat(bBLK, 1)
-		bTMP[7] = 0
-		var nGAS uint64
-		iter := me.dbGAS.NewIterator(nil, nil)
-		for iter.Seek(bTMP); iter.Next(); {
-			bGAS := iter.Value()
-			nGAS += binary.BigEndian.Uint64(bGAS)
-		}
-		iter.Release()
-		if err := iter.Error(); err != nil {
-			log.Fatalln(err)
-		}
-		bGAS := make([]byte, 8)
-		binary.BigEndian.PutUint64(bGAS, nGAS)
-		if err := me.l1GAS.Put(bTMP, bGAS, nil); err != nil {
-			log.Fatalln(err)
-		}
-	}
-
-	// update L2 cache
-	if nBLK&0xffff == 0xffff {
-		bTMP := bytes.Repeat(bBLK, 1)
-		bTMP[7] = 0
-		bTMP[6] = 0
-		var nGAS uint64
-		iter := me.l1GAS.NewIterator(nil, nil)
-		for iter.Seek(bTMP); iter.Next(); {
-			bGAS := iter.Value()
-			nGAS += binary.BigEndian.Uint64(bGAS)
-		}
-		iter.Release()
-		if err := iter.Error(); err != nil {
-			log.Fatalln(err)
-		}
-		bGAS := make([]byte, 8)
-		binary.BigEndian.PutUint64(bGAS, nGAS)
-		if err := me.l2GAS.Put(bTMP, bGAS, nil); err != nil {
-			log.Fatalln(err)
-		}
-	}
-
-	// update L3 cache
-	if nBLK&0xffffff == 0xffffff {
-		bTMP := bytes.Repeat(bBLK, 1)
-		bTMP[7] = 0
-		bTMP[6] = 0
-		bTMP[5] = 0
-		var nGAS uint64
-		iter := me.l2GAS.NewIterator(nil, nil)
-		for iter.Seek(bTMP); iter.Next(); {
-			bGAS := iter.Value()
-			nGAS += binary.BigEndian.Uint64(bGAS)
-		}
-		iter.Release()
-		if err := iter.Error(); err != nil {
-			log.Fatalln(err)
-		}
-		bGAS := make([]byte, 8)
-		binary.BigEndian.PutUint64(bGAS, nGAS)
-		if err := me.l3GAS.Put(bTMP, bGAS, nil); err != nil {
-			log.Fatalln(err)
-		}
-	}
-	// inc block index
-	me.block++
 }
 
 // quit staking and claim GAS
@@ -183,77 +116,16 @@ func (me *exp) claim(address []byte) uint64 {
 		log.Fatalln(err)
 	}
 	nNEO := binary.BigEndian.Uint64(bNEO)
-	nBLK := binary.BigEndian.Uint64(bBLK)
+	bCUR := make([]byte, 8)
+	binary.BigEndian.PutUint64(bCUR, me.block)
+
 	var gas uint64
-
-	for nBLK < me.block && nBLK&0xff > 0 {
-		binary.BigEndian.PutUint64(bBLK, nBLK)
-		bGAS, err := me.dbGAS.Get(bBLK, nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		gas += binary.BigEndian.Uint64(bGAS)
-		nBLK++
+	if bTMP, err := me.dbGAS.Get(bCUR, nil); err == nil {
+		gas += binary.BigEndian.Uint64(bTMP)
 	}
 
-	for nBLK+0xff < me.block && nBLK&0xffff > 0 {
-		binary.BigEndian.PutUint64(bBLK, nBLK)
-		bGAS, err := me.l1GAS.Get(bBLK, nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		gas += binary.BigEndian.Uint64(bGAS)
-		nBLK += 0x100
-	}
-
-	for nBLK+0xffff < me.block && nBLK&0xffffff > 0 {
-		binary.BigEndian.PutUint64(bBLK, nBLK)
-		bGAS, err := me.l2GAS.Get(bBLK, nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		gas += binary.BigEndian.Uint64(bGAS)
-		nBLK += 0x10000
-	}
-
-	for nBLK+0xffffff < me.block {
-		binary.BigEndian.PutUint64(bBLK, nBLK)
-		bGAS, err := me.l3GAS.Get(bBLK, nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		gas += binary.BigEndian.Uint64(bGAS)
-		nBLK += 0x1000000
-	}
-
-	for nBLK+0xffff < me.block {
-		binary.BigEndian.PutUint64(bBLK, nBLK)
-		bGAS, err := me.l2GAS.Get(bBLK, nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		gas += binary.BigEndian.Uint64(bGAS)
-		nBLK += 0x10000
-	}
-
-	for nBLK+0xff < me.block {
-		binary.BigEndian.PutUint64(bBLK, nBLK)
-		bGAS, err := me.l1GAS.Get(bBLK, nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		gas += binary.BigEndian.Uint64(bGAS)
-		nBLK += 0x100
-	}
-
-	for nBLK < me.block {
-		binary.BigEndian.PutUint64(bBLK, nBLK)
-		bGAS, err := me.dbGAS.Get(bBLK, nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		gas += binary.BigEndian.Uint64(bGAS)
-		nBLK++
+	if bTMP, err := me.dbGAS.Get(bBLK, nil); err == nil {
+		gas -= binary.BigEndian.Uint64(bTMP)
 	}
 
 	if err := me.dbNEO.Delete(address, nil); err != nil {
