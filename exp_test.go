@@ -12,14 +12,14 @@ func Benchmark_next(b *testing.B) {
 	defer restore()
 
 	obj := &exp{}
-	obj.init(0)
+	obj.init()
 	defer obj.close()
 
 	b.ResetTimer()
 	defer b.StopTimer()
 
 	for i := 0; i < b.N; i++ {
-		obj.next(100000000)
+		obj.next(uint64(i), 100000000)
 	}
 }
 
@@ -28,7 +28,7 @@ func Benchmark_claim(b *testing.B) {
 	defer restore()
 
 	obj := &exp{}
-	obj.init(0)
+	obj.init()
 	defer obj.close()
 
 	addresses := make([][]byte, b.N)
@@ -38,7 +38,7 @@ func Benchmark_claim(b *testing.B) {
 	defer b.StopTimer()
 
 	for i := 0; i < b.N; i++ {
-		obj.claim(addresses[i])
+		obj.claim(1, addresses[i])
 	}
 }
 
@@ -47,7 +47,7 @@ func Benchmark_stake(b *testing.B) {
 	defer restore()
 
 	obj := &exp{}
-	obj.init(0)
+	obj.init()
 	defer obj.close()
 
 	addresses := make([][]byte, b.N)
@@ -62,7 +62,7 @@ func Benchmark_stake(b *testing.B) {
 	defer b.StopTimer()
 
 	for i := 0; i < b.N; i++ {
-		obj.stake(addresses[i], neos[i])
+		obj.stake(1, addresses[i], neos[i])
 	}
 }
 
@@ -71,21 +71,21 @@ func Benchmark_claim_peak(b *testing.B) {
 	defer restore()
 
 	obj := &exp{}
-	obj.init(0)
+	obj.init()
 	defer obj.close()
 
 	addresses := make([][]byte, b.N)
 	obj.addresses(addresses)
 
 	for i := 0; i < pob; i++ {
-		obj.next(100000000)
+		obj.next(uint64(i), 100000000)
 	}
 
 	b.ResetTimer()
 	defer b.StopTimer()
 
 	for i := 0; i < b.N; i++ {
-		obj.claim(addresses[i])
+		obj.claim(pob, addresses[i])
 	}
 }
 

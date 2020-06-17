@@ -18,15 +18,10 @@ In this experiment, each `exp` struct represents a gas distribution instance for
 # expected outputs
 
 ```
-root@3b50fac68f47:/workspaces# go test -benchmem -run=^$ -bench . -timeout=30m -benchtime=1000x
-goos: linux
-goarch: amd64
-Benchmark_next-4                    1000              4319 ns/op             287 B/op          5 allocs/op
-Benchmark_claim-4                   1000             32746 ns/op            4164 B/op         56 allocs/op
-Benchmark_stake-4                   1000              9519 ns/op             537 B/op          8 allocs/op
-Benchmark_claim_peak-4              1000            483743 ns/op           58947 B/op       1988 allocs/op
-PASS
-ok      _/workspaces/100mcal    1329.084s
+Benchmark_next-4                    1000              4974 ns/op             390 B/op          9 allocs/op
+Benchmark_claim-4                   1000             29523 ns/op            4374 B/op         62 allocs/op
+Benchmark_stake-4                   1000              8661 ns/op             541 B/op          8 allocs/op
+Benchmark_claim_peak-4              1000             26968 ns/op            4402 B/op         62 allocs/op
 ```
 
 after `100000000` blocks

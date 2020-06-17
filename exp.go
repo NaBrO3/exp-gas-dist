@@ -18,8 +18,6 @@ type exp struct {
 	dbBLK *leveldb.DB
 	// KV {BLOCK INDEX -> DISTRIBUTED GAS PER NEO}
 	dbGAS *leveldb.DB
-	// current block index
-	block uint64
 	// total vote count
 	count uint64
 }
@@ -32,12 +30,10 @@ func (me *exp) reset() {
 }
 
 // load leveldb and init
-func (me *exp) init(block uint64) {
+func (me *exp) init() {
 	me.dbNEO = db("data/neo")
 	me.dbBLK = db("data/blk")
 	me.dbGAS = db("data/gas")
-
-	me.block = block
 
 	// vote counting
 	iter := me.dbNEO.NewIterator(nil, nil)
@@ -57,7 +53,7 @@ func (me *exp) gen(size int) {
 		address := randaddr()
 
 		nNEO := rand.Uint64()%255 + 1
-		nBLK := me.block
+		nBLK := uint64(0)
 		bNEO := make([]byte, 8)
 		bBLK := make([]byte, 8)
 
@@ -77,24 +73,15 @@ func (me *exp) gen(size int) {
 }
 
 // next block
-func (me *exp) next(inflation uint64) {
-	me.block++
+func (me *exp) next(block uint64, inflation uint64) {
 	// nGAS: calculate distributed GAS per NEO in current block
 	nGAS := inflation / me.count
-	nBLK := me.block
 	bGAS := make([]byte, 8)
 	bBLK := make([]byte, 8)
 
-	nCUR := me.block - 1
-	bCUR := make([]byte, 8)
-	binary.BigEndian.PutUint64(bCUR, nCUR)
-
-	if bTMP, err := me.dbGAS.Get(bCUR, nil); err == nil {
-		nGAS += binary.BigEndian.Uint64(bTMP)
-	}
-
+	nGAS += me.getgas(block)
 	binary.BigEndian.PutUint64(bGAS, nGAS)
-	binary.BigEndian.PutUint64(bBLK, nBLK)
+	binary.BigEndian.PutUint64(bBLK, block)
 
 	// write nGAS to db
 	if err := me.dbGAS.Put(bBLK, bGAS, nil); err != nil {
@@ -103,7 +90,7 @@ func (me *exp) next(inflation uint64) {
 }
 
 // quit staking and claim GAS
-func (me *exp) claim(address []byte) uint64 {
+func (me *exp) claim(block uint64, address []byte) uint64 {
 	bNEO, err := me.dbNEO.Get(address, nil)
 	if err == leveldb.ErrNotFound {
 		return 0
@@ -116,17 +103,10 @@ func (me *exp) claim(address []byte) uint64 {
 		log.Fatalln(err)
 	}
 	nNEO := binary.BigEndian.Uint64(bNEO)
-	bCUR := make([]byte, 8)
-	binary.BigEndian.PutUint64(bCUR, me.block)
+	nBLK := binary.BigEndian.Uint64(bBLK)
 
-	var gas uint64
-	if bTMP, err := me.dbGAS.Get(bCUR, nil); err == nil {
-		gas += binary.BigEndian.Uint64(bTMP)
-	}
-
-	if bTMP, err := me.dbGAS.Get(bBLK, nil); err == nil {
-		gas -= binary.BigEndian.Uint64(bTMP)
-	}
+	gas := me.getgas(block)
+	gas -= me.getgas(nBLK)
 
 	if err := me.dbNEO.Delete(address, nil); err != nil {
 		log.Fatalln(err)
@@ -138,12 +118,11 @@ func (me *exp) claim(address []byte) uint64 {
 }
 
 // stake
-func (me *exp) stake(address []byte, nNEO uint64) {
-	nBLK := me.block
+func (me *exp) stake(block uint64, address []byte, nNEO uint64) {
 	bNEO := make([]byte, 8)
 	bBLK := make([]byte, 8)
 	binary.BigEndian.PutUint64(bNEO, nNEO)
-	binary.BigEndian.PutUint64(bBLK, nBLK)
+	binary.BigEndian.PutUint64(bBLK, block)
 
 	if err := me.dbNEO.Put(address, bNEO, nil); err != nil {
 		log.Fatalln(err)
@@ -168,6 +147,20 @@ func (me *exp) addresses(ret [][]byte) {
 		log.Fatalln(err)
 	}
 	return
+}
+
+// get data from dbGAS
+func (me *exp) getgas(block uint64) uint64 {
+	bBLK := make([]byte, 8)
+	binary.BigEndian.PutUint64(bBLK, block)
+	iter := me.dbNEO.NewIterator(nil, nil)
+	if iter.Seek(bBLK) == false {
+		if iter.Prev() == false {
+			return 0
+		}
+	}
+	bGAS := iter.Value()
+	return binary.BigEndian.Uint64(bGAS)
 }
 
 // close instance
