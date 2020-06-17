@@ -4,7 +4,7 @@ package main
 func main() {
 	obj := &exp{}
 	obj.reset()
-	obj.init(0)
+	obj.init()
 	obj.gen(nov)
 	defer obj.close()
 }
