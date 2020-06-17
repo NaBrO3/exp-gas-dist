@@ -12,13 +12,13 @@ In this experiment, each `exp` struct represents a gas distribution instance for
 2. run test
 
    ```sh
-    go test -benchmem -run=^$ -bench . -benchtime=1000x
+    go test -benchmem -run=^$ -bench . -timeout=30m -benchtime=1000x
    ```
 
 # expected outputs
 
 ```
-root@3b50fac68f47:/workspaces# go test -benchmem -run=^$ -bench . -timeout=30min -benchtime=1000x
+root@3b50fac68f47:/workspaces# go test -benchmem -run=^$ -bench . -timeout=30m -benchtime=1000x
 goos: linux
 goarch: amd64
 Benchmark_next-4                    1000              4319 ns/op             287 B/op          5 allocs/op
