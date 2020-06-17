@@ -34,11 +34,15 @@ func Benchmark_claim(b *testing.B) {
 	addresses := make([][]byte, b.N)
 	obj.addresses(addresses)
 
+	for i := 0; i < b.N; i++ {
+		obj.next(uint64(i), 100000000)
+	}
+
 	b.ResetTimer()
 	defer b.StopTimer()
 
 	for i := 0; i < b.N; i++ {
-		obj.claim(1, addresses[i])
+		obj.claim(uint64(b.N), addresses[i])
 	}
 }
 
@@ -66,29 +70,6 @@ func Benchmark_stake(b *testing.B) {
 	}
 }
 
-func Benchmark_claim_peak(b *testing.B) {
-	backup()
-	defer restore()
-
-	obj := &exp{}
-	obj.init()
-	defer obj.close()
-
-	addresses := make([][]byte, b.N)
-	obj.addresses(addresses)
-
-	for i := 0; i < pob; i++ {
-		obj.next(uint64(i), 100000000)
-	}
-
-	b.ResetTimer()
-	defer b.StopTimer()
-
-	for i := 0; i < b.N; i++ {
-		obj.claim(pob, addresses[i])
-	}
-}
-
 func backup() {
 	if err := exec.Command("cp", "-r", "data", "data.bak").Run(); err != nil {
 		log.Fatalln(err)
@@ -103,6 +84,3 @@ func restore() {
 		log.Fatalln(err)
 	}
 }
-
-// in worst case, one have 50-years' unclaimed GAS
-const pob = 100000000
