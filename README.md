@@ -32,8 +32,8 @@ after `100000000` blocks
 
 ```
 root@3b50fac68f47:/workspaces# du -h -d 1 data
-16K     data/gas
+740M    data/gas
 2.6G    data/blk
 2.7G    data/neo
-5.3G    data
+6.0G    data
 ```
